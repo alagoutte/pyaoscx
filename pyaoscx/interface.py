@@ -2402,6 +2402,11 @@ class Interface(PyaoscxModule):
         :return: True if object changed.
         """
 
+        if hasattr(self, "routing") and self.routing:
+            raise VerificationError(
+                "Configuring Spanning Tree is allowed only on bridged ports."
+            )
+
         _stp_config = {}
 
         if admin_edge_port_enable is not None:
