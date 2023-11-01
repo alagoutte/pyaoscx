@@ -2389,3 +2389,23 @@ class Interface(PyaoscxModule):
                     )
         self.user_config.update(_user_config)
         return self.apply()
+
+    @PyaoscxModule.materialized
+    def configure_spanning_tree(
+        self,
+        admin_edge_port_enable=None,
+    ):
+        """
+        Configure the Interface Spanning Tree Settings.
+
+        :param admin_edge_port_enable: Boolean to set admin type: admin-edge or admin-network (default)
+        :return: True if object changed.
+        """
+
+        _stp_config = {}
+
+        if admin_edge_port_enable is not None:
+            _stp_config["admin_edge_port_enable"] = admin_edge_port_enable
+
+        self.stp_config.update(_stp_config)
+        return self.apply()
