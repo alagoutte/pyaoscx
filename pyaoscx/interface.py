@@ -2394,11 +2394,13 @@ class Interface(PyaoscxModule):
     def configure_spanning_tree(
         self,
         admin_edge_port_enable=None,
+        bpdu_filter_enable=None,
     ):
         """
         Configure the Interface Spanning Tree Settings.
 
         :param admin_edge_port_enable: Boolean to set admin type: admin-edge or admin-network (default)
+        :param bpdu_filter_enable: Boolean to set BPDU filter (disable by default)
         :return: True if object changed.
         """
 
@@ -2412,5 +2414,8 @@ class Interface(PyaoscxModule):
         if admin_edge_port_enable is not None:
             _stp_config["admin_edge_port_enable"] = admin_edge_port_enable
 
+        if bpdu_filter_enable is not None:
+            _stp_config["bpdu_filter_enable"] = bpdu_filter_enable
+ 
         self.stp_config.update(_stp_config)
         return self.apply()
