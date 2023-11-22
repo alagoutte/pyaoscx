@@ -43,6 +43,8 @@ class Interface(PyaoscxModule):
 
     ip6_addresses = ListDescriptor("ip6_addresses")
 
+    logging.basicConfig(filename='interface.log', encoding='utf-8', level=logging.DEBUG)
+
     def __init__(self, session, name, uri=None, ip6_addresses=[], **kwargs):
         self.session = session
         self._uri = uri
