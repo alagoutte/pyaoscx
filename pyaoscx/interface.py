@@ -2397,6 +2397,7 @@ class Interface(PyaoscxModule):
         bpdu_filter_enable=None,
         bpdu_guard_enable=None,
         loop_guard_enable=None,
+        root_guard_enable=None,
     ):
         """
         Configure the Interface Spanning Tree Settings.
@@ -2405,6 +2406,7 @@ class Interface(PyaoscxModule):
         :param bpdu_filter_enable: Boolean to set BPDU filter (disable by default)
         :param bpdu_guard_enable: Boolean to set BPDU guard (disable by default)
         :param loop_guard_enable: Boolean to set Loop guard (disable by default)
+        :param root_guard_enable: Boolean to set Root guard (disable by default)
         :return: True if object changed.
         """
 
@@ -2426,6 +2428,9 @@ class Interface(PyaoscxModule):
 
         if loop_guard_enable is not None:
             _stp_config["loop_guard_enable"] = loop_guard_enable
+
+        if root_guard_enable is not None:
+            _stp_config["root_guard_enable"] = root_guard_enable
 
         self.stp_config.update(_stp_config)
         return self.apply()
