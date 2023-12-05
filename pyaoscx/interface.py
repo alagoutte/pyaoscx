@@ -2396,6 +2396,7 @@ class Interface(PyaoscxModule):
         admin_edge_port_enable=None,
         bpdu_filter_enable=None,
         bpdu_guard_enable=None,
+        link_type=None,
         loop_guard_enable=None,
         root_guard_enable=None,
     ):
@@ -2405,6 +2406,7 @@ class Interface(PyaoscxModule):
         :param admin_edge_port_enable: Boolean to set admin type: admin-edge or admin-network (default)
         :param bpdu_filter_enable: Boolean to set BPDU filter (disable by default)
         :param bpdu_guard_enable: Boolean to set BPDU guard (disable by default)
+        :param link_type: string to set link-type(auto/point_to_point/shared) (auto by default)
         :param loop_guard_enable: Boolean to set Loop guard (disable by default)
         :param root_guard_enable: Boolean to set Root guard (disable by default)
         :return: True if object changed.
@@ -2431,6 +2433,9 @@ class Interface(PyaoscxModule):
 
         if root_guard_enable is not None:
             _stp_config["root_guard_enable"] = root_guard_enable
+
+        if link_type is not None:
+            _stp_config["link_type"] = link_type
 
         self.stp_config.update(_stp_config)
         return self.apply()
