@@ -2403,12 +2403,18 @@ class Interface(PyaoscxModule):
         """
         Configure the Interface Spanning Tree Settings.
 
-        :param admin_edge_port_enable: Boolean to set admin type: admin-edge or admin-network (default)
-        :param bpdu_filter_enable: Boolean to set BPDU filter (disable by default)
-        :param bpdu_guard_enable: Boolean to set BPDU guard (disable by default)
-        :param link_type: string to set link-type(auto/point_to_point/shared) (auto by default)
-        :param loop_guard_enable: Boolean to set Loop guard (disable by default)
-        :param root_guard_enable: Boolean to set Root guard (disable by default)
+        :param admin_edge_port_enable: Boolean to set admin type: admin-edge or
+            admin-network (default)
+        :param bpdu_filter_enable: Boolean to set BPDU filter (disable by
+            default)
+        :param bpdu_guard_enable: Boolean to set BPDU guard (disable
+            by default)
+        :param link_type: string to set link-type (auto/point_to_point/shared)
+            (auto by default)
+        :param loop_guard_enable: Boolean to set Loop guard (disable
+            by default)
+        :param root_guard_enable: Boolean to set Root guard (disable
+            by default)
         :return: True if object changed.
         """
 
