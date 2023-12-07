@@ -2424,7 +2424,7 @@ class Interface(PyaoscxModule):
 
         if bpdu_filter_enable is not None:
             _stp_config["bpdu_filter_enable"] = bpdu_filter_enable
- 
+
         if bpdu_guard_enable is not None:
             _stp_config["bpdu_guard_enable"] = bpdu_guard_enable
 
