@@ -2445,3 +2445,32 @@ class Interface(PyaoscxModule):
 
         self.stp_config.update(_stp_config)
         return self.apply()
+
+    @PyaoscxModule.materialized
+    def configure_loop_protect(
+        self,
+        loop_protect_enable=None,
+        loop_protect_action=None,
+    ):
+        """
+        Configure the Interface Loop Protect Settings.
+
+        :param loop_protect_enable: Boolean to set enable Loop Protect (disable
+            by default)
+        :param loop_protect_action: String to set Loop Protect Action:
+            do-not-disable, tx-disable, tx-rx-disable
+        :return: True if object changed.
+        """
+
+        if hasattr(self, "routing") and self.routing:
+            raise VerificationError(
+                "Configuring Loop Protect is allowed only on bridged ports."
+            )
+
+        if loop_protect_enable is not None:
+            self.loop_protect_enable = loop_protect_enable
+
+        if loop_protect_action is not None:
+            self.loop_protect_action = loop_protect_action
+
+        return self.apply()
