@@ -2474,3 +2474,29 @@ class Interface(PyaoscxModule):
             self.loop_protect_action = loop_protect_action
 
         return self.apply()
+
+    @PyaoscxModule.materialized
+    def configure_lldp(
+        self,
+        lldp_enable_dir=None,
+        lldp_trap_enable=None,
+    ):
+        """
+        Configure the Interface LLDP Settings.
+
+        :param lldp_enable_dir: string to set LLDP Direction: off, rx, tx, rxtx
+            (rxtx by default)
+        :param lldp_trap_enable: Boolean to set LLDP Trap (enable by default)
+        :return: True if object changed.
+        """
+
+        _other_config = {}
+
+        if lldp_enable_dir is not None:
+             _other_config["lldp_enable_dir"] = lldp_enable_dir
+
+        if lldp_trap_enable is not None:
+             _other_config["lldp_trap_enable"] = lldp_trap_enable
+
+        self.other_config.update(_other_config)
+        return self.apply()
