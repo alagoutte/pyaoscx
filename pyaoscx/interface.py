@@ -2500,3 +2500,28 @@ class Interface(PyaoscxModule):
 
         self.other_config.update(_other_config)
         return self.apply()
+
+    @PyaoscxModule.materialized
+    def configure_options(
+        self,
+        cdp_disable=None,
+        sflow_enabled=None,
+    ):
+        """
+        Configure the Interface Options Settings.
+
+        :param cdp_disable: Boolean to disable CDP (disable by default)
+        :param sflow_enabled: Boolean to set sflow (enable by default)
+        :return: True if object changed.
+        """
+
+        _other_config = {}
+
+        if cdp_disable is not None:
+             self.cdp_disable = cdp_disable
+
+        if sflow_enabled is not None:
+             _other_config["sflow-enabled"] = sflow_enabled
+
+        self.other_config.update(_other_config)
+        return self.apply()
