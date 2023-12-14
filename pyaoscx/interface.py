@@ -2506,12 +2506,14 @@ class Interface(PyaoscxModule):
         self,
         cdp_disable=None,
         sflow_enabled=None,
+        ip_mtu=None,
     ):
         """
         Configure the Interface Options Settings.
 
         :param cdp_disable: Boolean to disable CDP (disable by default)
         :param sflow_enabled: Boolean to set sflow (enable by default)
+        :param ip_mtu: int to set IP MTU (1500 by default)
         :return: True if object changed.
         """
 
@@ -2520,6 +2522,9 @@ class Interface(PyaoscxModule):
         if cdp_disable is not None:
              self.cdp_disable = cdp_disable
 
+        if ip_mtu is not None:
+             self.ip_mtu = ip_mtu
+             
         if sflow_enabled is not None:
              _other_config["sflow-enabled"] = sflow_enabled
 
