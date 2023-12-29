@@ -2493,10 +2493,10 @@ class Interface(PyaoscxModule):
         _other_config = {}
 
         if lldp_enable_dir is not None:
-             _other_config["lldp_enable_dir"] = lldp_enable_dir
+            _other_config["lldp_enable_dir"] = lldp_enable_dir
 
         if lldp_trap_enable is not None:
-             _other_config["lldp_trap_enable"] = lldp_trap_enable
+            _other_config["lldp_trap_enable"] = lldp_trap_enable
 
         self.other_config.update(_other_config)
         return self.apply()
@@ -2520,13 +2520,13 @@ class Interface(PyaoscxModule):
         _other_config = {}
 
         if cdp_disable is not None:
-             self.cdp_disable = cdp_disable
+            self.cdp_disable = cdp_disable
 
         if ip_mtu is not None:
-             self.ip_mtu = ip_mtu
-             
+            self.ip_mtu = ip_mtu
+
         if sflow_enabled is not None:
-             _other_config["sflow-enabled"] = sflow_enabled
+            _other_config["sflow-enabled"] = sflow_enabled
 
         self.other_config.update(_other_config)
         return self.apply()
