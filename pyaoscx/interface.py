@@ -2530,3 +2530,26 @@ class Interface(PyaoscxModule):
 
         self.other_config.update(_other_config)
         return self.apply()
+
+    @PyaoscxModule.materialized
+    def configure_port_access(
+        self,
+        port_access_radius_override_enable=None,
+        port_access_clients_limit=None,
+    ):
+        """
+        Configure the Interface Port Access Settings.
+
+        :param port_access_radius_override_enable: Boolean to RADIUS override
+          (disable by default)
+        :param port_access_clients_limit: int to set Client limit
+        :return: True if object changed.
+        """
+        if port_access_radius_override_enable is not None:
+            self.aaa_port_access_radius_override_enable = \
+                port_access_radius_override_enable
+
+        if port_access_clients_limit is not None:
+            self.port_access_clients_limit = port_access_clients_limit
+
+        return self.apply()
