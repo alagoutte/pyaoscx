@@ -1,4 +1,4 @@
-# (C) Copyright 2019-2022 Hewlett Packard Enterprise Development LP.
+# (C) Copyright 2019-2023 Hewlett Packard Enterprise Development LP.
 # Apache License 2.0
 
 import json
@@ -6,7 +6,7 @@ import logging
 import re
 
 from copy import deepcopy
-from random import randint
+
 from urllib.parse import quote_plus, unquote_plus
 from warnings import warn
 
@@ -20,6 +20,7 @@ from pyaoscx.exceptions.response_error import ResponseError
 from pyaoscx.exceptions.verification_error import VerificationError
 
 from pyaoscx.utils import util as utils
+from pyaoscx.utils.iptools import overlapping_ips
 from pyaoscx.utils.list_attributes import ListDescriptor
 
 import pyaoscx.vrf as vrf_mod
@@ -238,7 +239,7 @@ class Interface(PyaoscxModule):
             self.vlan_trunks = vlan_trunks
 
         # Set all ACLs
-        from pyaoscx.acl import ACL
+        ACL = self.session.api.get_module_class(self.session, "ACL")
 
         if hasattr(self, "aclmac_in_cfg") and self.aclmac_in_cfg is not None:
             # Create Acl object
@@ -617,53 +618,89 @@ class Interface(PyaoscxModule):
         # Set all ACLs
         if "aclmac_in_cfg" in iface_data and self.aclmac_in_cfg:
             # Set values in correct form
+            self.aclmac_in_cfg.get()
             iface_data["aclmac_in_cfg"] = self.aclmac_in_cfg.get_info_format()
+            iface_data[
+                "aclmac_in_cfg_version"
+            ] = self.aclmac_in_cfg_version
 
         if "aclmac_out_cfg" in iface_data and self.aclmac_out_cfg:
             # Set values in correct form
+            self.aclmac_out_cfg.get()
             iface_data[
                 "aclmac_out_cfg"
             ] = self.aclmac_out_cfg.get_info_format()
+            iface_data[
+                "aclmac_out_cfg_version"
+            ] = self.aclmac_out_cfg_version
 
         if "aclv4_in_cfg" in iface_data and self.aclv4_in_cfg:
             # Set values in correct form
+            self.aclv4_in_cfg.get()
             iface_data["aclv4_in_cfg"] = self.aclv4_in_cfg.get_info_format()
+            iface_data["aclv4_in_cfg_version"] = self.aclv4_in_cfg_version
 
         if "aclv4_out_cfg" in iface_data and self.aclv4_out_cfg:
             # Set values in correct form
+            self.aclv4_out_cfg.get()
             iface_data["aclv4_out_cfg"] = self.aclv4_out_cfg.get_info_format()
+            iface_data[
+                "aclv4_out_cfg_version"
+            ] = self.aclv4_out_cfg_version
 
         if "aclv4_routed_in_cfg" in iface_data and self.aclv4_routed_in_cfg:
             # Set values in correct form
+            self.aclv4_routed_in_cfg.get()
             iface_data[
                 "aclv4_routed_in_cfg"
             ] = self.aclv4_routed_in_cfg.get_info_format()
+            iface_data[
+                "aclv4_routed_in_cfg_version"
+            ] = self.aclv4_routed_in_cfg_version
 
         if "aclv4_routed_out_cfg" in iface_data and self.aclv4_routed_out_cfg:
             # Set values in correct form
+            self.aclv4_routed_out_cfg.get()
             iface_data[
                 "aclv4_routed_out_cfg"
             ] = self.aclv4_routed_out_cfg.get_info_format()
+            iface_data[
+                "aclv4_routed_out_cfg_version"
+            ] = self.aclv4_routed_out_cfg_version
 
         if "aclv6_in_cfg" in iface_data and self.aclv6_in_cfg:
             # Set values in correct form
+            self.aclv6_in_cfg.get()
             iface_data["aclv6_in_cfg"] = self.aclv6_in_cfg.get_info_format()
+            iface_data["aclv6_in_cfg_version"] = self.aclv6_in_cfg_version
 
         if "aclv6_out_cfg" in iface_data and self.aclv6_out_cfg:
             # Set values in correct form
+            self.aclv6_out_cfg.get()
             iface_data["aclv6_out_cfg"] = self.aclv6_out_cfg.get_info_format()
+            iface_data[
+                "aclv6_out_cfg_version"
+            ] = self.aclv6_out_cfg_version
 
         if "aclv6_routed_in_cfg" in iface_data and self.aclv6_routed_in_cfg:
             # Set values in correct form
+            self.aclv6_routed_in_cfg.get()
             iface_data[
                 "aclv6_routed_in_cfg"
             ] = self.aclv6_routed_in_cfg.get_info_format()
+            iface_data[
+                "aclv6_routed_in_cfg_version"
+            ] = self.aclv6_routed_in_cfg_version
 
         if "aclv6_routed_out_cfg" in iface_data and self.aclv6_routed_out_cfg:
             # Set values in correct form
+            self.aclv6_routed_out_cfg.get()
             iface_data[
                 "aclv6_routed_out_cfg"
             ] = self.aclv6_routed_out_cfg.get_info_format()
+            iface_data[
+                "aclv6_routed_out_cfg_version"
+            ] = self.aclv6_routed_out_cfg_version
 
         uri = "{0}/{1}".format(Interface.base_uri, self.percents_name)
 
@@ -1039,6 +1076,14 @@ class Interface(PyaoscxModule):
             self.ip4_address = None
             self.ip4_address_secondary = None
         elif isinstance(ipv4, list):
+            for ip_address in ipv4:
+                overlapping_ips(
+                    self.session,
+                    self.name,
+                    ip4_addr=ip_address,
+                    ip6_addr=None,
+                    new_vrf=vrf,
+                )
             self.ip4_address = ipv4[0]
             self.ip4_address_secondary = ipv4[1:]
 
@@ -1046,6 +1091,13 @@ class Interface(PyaoscxModule):
         ipv6_configured = False
         if ipv6 is not None and ipv6 != []:
             for ip_address in ipv6:
+                overlapping_ips(
+                    self.session,
+                    self.name,
+                    ip4_addr=None,
+                    ip6_addr=ip_address,
+                    new_vrf=vrf,
+                )
                 # Verify if incoming address is a string
                 if isinstance(ip_address, str):
                     # Create Ipv6 object -- add it to ipv6_addresses internal
@@ -1156,6 +1208,13 @@ class Interface(PyaoscxModule):
         # Set IPv4
         if ipv4 is not None and ipv4 != []:
             for i in range(len(ipv4)):
+                overlapping_ips(
+                    self.session,
+                    self.name,
+                    ip4_addr=ipv4[i],
+                    ip6_addr=None,
+                    new_vrf=vrf,
+                )
                 if i == 0:
                     self.ip4_address = ipv4[i]
                 else:
@@ -1168,6 +1227,13 @@ class Interface(PyaoscxModule):
         ipv6_configured = False
         if ipv6 is not None and ipv6 != []:
             for ip_address in ipv6:
+                overlapping_ips(
+                    self.session,
+                    self.name,
+                    ip4_addr=None,
+                    ip6_addr=ip_address,
+                    new_vrf=vrf,
+                )
                 # Verify if incoming address is a string
                 if isinstance(ip_address, str):
                     # Create Ipv6 object -- add it to ipv6_addresses internal
@@ -1603,39 +1669,6 @@ class Interface(PyaoscxModule):
         # When changes are applied, port is disabled and lacp key changed
         return self.apply()
 
-    def clear_acl(self, acl_type, acl_direction):
-        """
-        Clear an interface's ACL.
-
-        :param acl_type: Type of ACL: options are 'aclv4_out', 'aclv4_in',
-            'aclv6_in', or 'aclv6_out'.
-        :return: True if object was changed.
-        """
-        if acl_type == "ipv6":
-            if acl_direction == "in":
-                self.aclv6_in_cfg = None
-                self.aclv6_in_cfg_version = None
-            else:
-                self.aclv6_out_cfg = None
-                self.aclv6_out_cfg_version = None
-        if acl_type == "ipv4":
-            if acl_direction == "in":
-                self.aclv4_in_cfg = None
-                self.aclv4_in_cfg_version = None
-            else:
-                self.aclv4_out_cfg = None
-                self.aclv4_out_cfg_version = None
-        if acl_type == "mac":
-            if acl_direction == "in":
-                self.aclmac_in_cfg = None
-                self.aclmac_in_cfg_version = None
-            else:
-                self.aclmac_out_cfg = None
-                self.aclmac_out_cfg_version = None
-
-        # Apply Changes
-        return self.apply()
-
     def initialize_interface_entry(self):
         """
         Initialize Interface to its default state.
@@ -1796,6 +1829,18 @@ class Interface(PyaoscxModule):
         self.vsx_virtual_ip4 = []
 
         # Apply changes
+        return self.apply()
+
+    def delete_active_gateway(self):
+        """
+        Deelte only IPv4 settings on a VLAN Interface.
+
+        :return: True if object was changed.
+        """
+
+        self.vsx_virtual_gw_mac_v4 = None
+        self.vsx_virtual_ip4 = []
+
         return self.apply()
 
     def configure_l3_ipv4_port(
@@ -2045,6 +2090,32 @@ class Interface(PyaoscxModule):
         # Apply changes
         return self.apply()
 
+    @PyaoscxModule.materialized
+    def set_acl(self, acl_name, list_type, direction):
+        """
+        Attach ACL to an interface
+
+        :param acl_name: The name of the ACL.
+        :param list_type: The type of the ACL (mac, ipv4 or ipv6).
+        :param direction: The direction of the ACL (in, out, routed-in,
+            routed-out)
+        :return: True if the object was changed
+        """
+        return utils.set_acl(self, acl_name, list_type, direction)
+
+    @PyaoscxModule.materialized
+    def clear_acl(self, list_type, direction):
+        """
+        Removes ACL from an interface
+
+        :param list_type: The type of the ACL (mac, ipv4 or ipv6).
+        :param direction: The direction of the ACL (in, out, routed-in,
+            routed-out)
+        :return: True if the object was changed
+        """
+        return utils.clear_acl(self, list_type, direction)
+
+    @PyaoscxModule.deprecated
     def update_acl_in(self, acl_name, list_type):
         """
         Perform GET and PUT calls to apply ACL on an interface. This function
@@ -2062,33 +2133,17 @@ class Interface(PyaoscxModule):
         # Get the current version
         acl_obj.get()
 
-        new_cfg_version = randint(-9007199254740991, 9007199254740991)
-
         if list_type == "ipv6":
             self.aclv6_in_cfg = acl_obj
-            if (
-                hasattr(self, "aclv6_in_cfg_version")
-                and self.aclv6_in_cfg_version is None
-            ):
-                self.aclv6_in_cfg_version = new_cfg_version
         elif list_type == "ipv4":
             self.aclv4_in_cfg = acl_obj
-            if (
-                hasattr(self, "aclv4_in_cfg_version")
-                and self.aclv4_in_cfg_version is None
-            ):
-                self.aclv4_in_cfg_version = new_cfg_version
         elif list_type == "mac":
             self.aclmac_in_cfg = acl_obj
-            if (
-                hasattr(self, "aclmac_in_cfg_version")
-                and self.aclmac_in_cfg_version is None
-            ):
-                self.aclmac_in_cfg_version = new_cfg_version
 
         # Apply changes
         return self.apply()
 
+    @PyaoscxModule.deprecated
     def update_acl_out(self, acl_name, list_type):
         """
         Perform GET and PUT calls to apply ACL on an interface. This function
@@ -2107,29 +2162,12 @@ class Interface(PyaoscxModule):
         # Get the current version
         acl_obj.get()
 
-        new_cfg_version = randint(-9007199254740991, 9007199254740991)
-
         if list_type == "ipv6":
             self.aclv6_out_cfg = acl_obj
-            if (
-                hasattr(self, "aclv6_out_cfg_version")
-                and self.aclv6_out_cfg_version is None
-            ):
-                self.aclv6_out_cfg_version = new_cfg_version
         elif list_type == "ipv4":
             self.aclv4_out_cfg = acl_obj
-            if (
-                hasattr(self, "aclv4_out_cfg_version")
-                and self.aclv4_out_cfg_version is None
-            ):
-                self.aclv4_out_cfg_version = new_cfg_version
         elif list_type == "mac":
             self.aclmac_out_cfg = acl_obj
-            if (
-                hasattr(self, "aclmac_out_cfg_version")
-                and self.aclmac_out_cfg_version is None
-            ):
-                self.aclmac_out_cfg_version = new_cfg_version
 
         # Routing
         self.routing = True
@@ -2182,7 +2220,7 @@ class Interface(PyaoscxModule):
         self.port_security["enable"] = True
 
         device = Device(self.session)
-        device.get()
+        device.get(selector="status")
         max_clients = device.capacities[
             "port_access_port_security_max_client_limit"
         ]

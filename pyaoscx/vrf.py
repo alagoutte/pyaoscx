@@ -155,7 +155,7 @@ class Vrf(PyaoscxModule):
 
         device = Device(self.session)
         if not device.materialized:
-            device.get()
+            device.get(selector="status")
 
         # Clean BGP Router settings
         if "bgp" in device.capabilities and self.bgp_routers == []:
@@ -339,6 +339,40 @@ class Vrf(PyaoscxModule):
 
         # Object was modified
         return True
+
+    def get_interfaces(self):
+        """
+        Get interfaces that belong to this VRF
+
+        :return: list of interface members of this VRF
+        """
+
+        list_interf = []
+        device = Device(self.session)
+        configuration = device.configuration()
+        running_config = configuration.get_full_config()
+        interfaces = running_config["Port"]
+        for interface in interfaces.values():
+            if "vrf" in interface:
+                # Get interfaces that belong to this another VRF
+                if interface["vrf"] == self.name:
+                    list_interf.append(
+                        self.session.api.get_module(
+                            self.session, "Interface", interface["name"]
+                        )
+                    )
+
+            # Get interfaces that belong at vrf "default"
+            elif (
+                "routing" not in interface or interface["routing"]
+            ) and self.name == "default":
+                list_interf.append(
+                    self.session.api.get_module(
+                        self.session, "Interface", interface["name"]
+                    )
+                )
+
+        return list_interf
 
     @PyaoscxModule.connected
     def delete(self):

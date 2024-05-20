@@ -36,7 +36,7 @@ class Device(PyaoscxFactory, metaclass=Singleton):
         self.get_firmware_version()
 
     @PyaoscxModule.connected
-    def get(self):
+    def get(self, selector=None):
         """
         Perform a GET call to retrieve device attributes. After data from
             response, Device class attributes are generated using
@@ -56,24 +56,14 @@ class Device(PyaoscxFactory, metaclass=Singleton):
             "software_info",
             "software_version",
             "qos_defaults",
+            "lldp_mgmt_neighbor_info",
         ]
 
-        configurable_attrs = [
-            "domain_name",
-            "hostname",
-            "other_config",
-            "qos_config",
-            "qos_default",
-            "q_profile_default",
-        ]
-
-        # Concatenate both config and non-config attrs without duplicates
-        all_attributes = list(set(non_configurable_attrs + configurable_attrs))
-
-        attributes_list = ",".join(all_attributes)
-        uri = "system?attributes={0}&depth={1}".format(
-            attributes_list, self.session.api.default_depth
-        )
+        uri = "system?depth={0}".format(self.session.api.default_depth)
+        if selector:
+            uri += "&selector={0}".format(selector)
+        else:
+            uri += "&attributes={0}".format(",".join(non_configurable_attrs))
 
         try:
             response = self.session.request("GET", uri)

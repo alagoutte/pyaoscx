@@ -5,13 +5,12 @@ import json
 import logging
 import re
 
-from random import randint
-
+from pyaoscx.device import Device
+from pyaoscx.exceptions.parameter_error import ParameterError
 from pyaoscx.exceptions.generic_op_error import GenericOperationError
 from pyaoscx.exceptions.response_error import ResponseError
 
 from pyaoscx.utils import util as utils
-from pyaoscx.utils.list_attributes import ListDescriptor
 
 from pyaoscx.pyaoscx_module import PyaoscxModule
 
@@ -26,10 +25,11 @@ class ACL(PyaoscxModule):
 
     indices = ["name", "list_type"]
 
-    cfg_aces = ListDescriptor("cfg_aces")
-
     def __init__(self, session, name, list_type, uri=None, **kwargs):
         self.session = session
+        device = Device(self.session)
+        device.get(selector="status")
+        self.capabilities = device.capabilities[:]
         # Assign IDs
         self.name = name
         self.list_type = list_type
@@ -43,11 +43,19 @@ class ACL(PyaoscxModule):
         # Set arguments needed for correct creation
         utils.set_creation_attrs(self, **kwargs)
         # Use to manage ACL Entries
-        self.cfg_aces = []
+        self.cfg_aces = {}
         # Attribute used to know if object was changed recently
         self.__modified = False
         # Set an initial random version
-        self._update_version()
+        self.cfg_version = 0
+
+    def __eq__(self, other):
+        return (
+            isinstance(other, ACL)
+            and self.session == other.session
+            and self.name == other.name
+            and self.list_type == other.list_type
+        )
 
     @PyaoscxModule.connected
     def get(self, depth=None, selector=None):
@@ -121,14 +129,11 @@ class ACL(PyaoscxModule):
         # Information is loaded from the Device
         self.materialized = True
 
-        # Clean ACL Entries settings
-        if self.cfg_aces == []:
-            # Set ACL Entries if any
-            # Adds ACL Entries to parent ACL already
-            AclEntry = self.session.api.get_module_class(
-                self.session, "AclEntry"
-            )
-            self.cfg_aces = list(AclEntry.get_all(self.session, self).values())
+        # Set ACL Entries if any
+        AclEntry = self.session.api.get_module_class(
+            self.session, "AclEntry"
+        )
+        self.cfg_aces = AclEntry.get_all(self.session, self)
         return True
 
     @classmethod
@@ -196,42 +201,31 @@ class ACL(PyaoscxModule):
         # Variable returned
         modified = False
 
-        acl_data = utils.get_attrs(self, self.config_attrs)
+        # The version should change every time the ACL (or any of
+        # its entries) change so that it is written to hardware
+        self._update_version()
+        acl_data = {}
+        acl_data["cfg_version"] = self.cfg_version
 
-        # Compare dictionaries
-        if acl_data == self.__original_attributes:
-            # Object was not modified
-            modified = False
+        post_data = json.dumps(acl_data)
 
-        else:
-            # The version should change every time the ACL (or any of
-            # its entries) change so that it is written to hardware
-            self._update_version()
-            acl_data["cfg_version"] = self.cfg_version
+        uri = "{0}/{1}{2}{3}".format(
+            ACL.base_uri,
+            self.name,
+            self.session.api.compound_index_separator,
+            self.list_type,
+        )
+        try:
+            response = self.session.request("PUT", uri, data=post_data)
 
-            post_data = json.dumps(acl_data)
+        except Exception as e:
+            raise ResponseError("PUT", e)
 
-            uri = "{0}/{1}{2}{3}".format(
-                ACL.base_uri,
-                self.name,
-                self.session.api.compound_index_separator,
-                self.list_type,
-            )
-            try:
-                response = self.session.request("PUT", uri, data=post_data)
+        if not utils._response_ok(response, "PUT"):
+            raise GenericOperationError(response.text, response.status_code)
 
-            except Exception as e:
-                raise ResponseError("PUT", e)
-
-            if not utils._response_ok(response, "PUT"):
-                raise GenericOperationError(
-                    response.text, response.status_code
-                )
-
-            logging.info("SUCCESS: Updating %s", self)
-            # Set new original attributes
-            self.__original_attributes = acl_data
-            modified = True
+        logging.info("SUCCESS: Updating %s", self)
+        modified = True
         return modified
 
     @PyaoscxModule.connected
@@ -242,9 +236,10 @@ class ACL(PyaoscxModule):
 
         :return modified: Boolean, True if entry was created.
         """
-        acl_data = utils.get_attrs(self, self.config_attrs)
+        acl_data = {}
         acl_data["name"] = self.name
         acl_data["list_type"] = self.list_type
+        acl_data["cfg_version"] = 0
 
         post_data = json.dumps(acl_data)
 
@@ -310,7 +305,7 @@ class ACL(PyaoscxModule):
         list_type = acl_arr[1]
         name = acl_arr[0]
 
-        return ACL(session, name, list_type)
+        return cls(session, name, list_type)
 
     @classmethod
     def from_uri(cls, session, uri):
@@ -390,8 +385,7 @@ class ACL(PyaoscxModule):
             change, the new configuration won't get to the hardware.
         """
 
-        new_cfg_version = randint(-9007199254740991, 9007199254740991)
-
+        new_cfg_version = self.cfg_version + 1
         if self.materialized:
             if hasattr(self, "cfg_version"):
                 logging.warning(
@@ -408,6 +402,29 @@ class ACL(PyaoscxModule):
                 )
 
         self.cfg_version = new_cfg_version
+
+    @property
+    def list_type(self):
+        """
+        Getter method for the list_type attribute.
+
+        :return: String value for type.
+        """
+        return self._type
+
+    @list_type.setter
+    def list_type(self, new_type):
+        """
+        Setter method for the list_type attribute.
+        """
+        valid_types = ["mac", "ipv4", "ipv6"]
+        if new_type not in valid_types:
+            raise ParameterError(
+                "Invalid ACL type {0} valid types are: {1}".format(
+                    new_type, ", ".join(valid_types)
+                )
+            )
+        self._type = new_type
 
     ####################################################################
     # IMPERATIVE FUNCTIONS
@@ -561,7 +578,7 @@ class ACL(PyaoscxModule):
         self.get()
 
         # Delete all entries
-        self.cfg_aces = []
+        self.cfg_aces = {}
 
         # ACL Entries deleted
         # Object modified

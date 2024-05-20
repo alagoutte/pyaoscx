@@ -1,4 +1,4 @@
-# (C) Copyright 2019-2023 Hewlett Packard Enterprise Development LP.
+# (C) Copyright 2019-2024 Hewlett Packard Enterprise Development LP.
 # Apache License 2.0
 
 import json
@@ -6,6 +6,7 @@ import logging
 import re
 
 from pyaoscx.exceptions.generic_op_error import GenericOperationError
+from pyaoscx.exceptions.parameter_error import ParameterError
 from pyaoscx.exceptions.response_error import ResponseError
 from pyaoscx.exceptions.verification_error import VerificationError
 
@@ -22,50 +23,11 @@ class AclEntry(PyaoscxModule):
     indices = ["sequence_number"]
     resource_uri_name = "cfg_aces"
 
-    protocol_dict = {
-        "ah": 51,
-        "esp": 50,
-        "gre": 47,
-        "icmp": 1,
-        "icmpv6": 58,
-        "igmp": 2,
-        "ospf": 89,
-        "pim": 103,
-        "sctp": 132,
-        "tcp": 6,
-        "udp": 17,
-    }
-
-    # These parameters cannot be changed once the ACE is created
-    # If any of them is set for update the entire ACE must be
-    # replaced (delete and re-create). This list is needed while
-    # we are not able to read the schema.
-    immutable_parameter_names = [
-        "action",
-        "count",
-        "dscp",
-        "dst_ip",
-        "dst_ip_group",
-        "dst_l4_port_group",
-        "dst_l4_port_max",
-        "dst_l4_port_min",
-        "dst_mac",
-        "ecn",
-        "ethertype",
-        "fragment",
-        "icmp_code",
-        "icmp_type",
-        "ip_precedence",
-        "log",
-        "pcp",
-        "protocol",
-        "sequence_number",
-        "src_ip",
-        "src_ip_group",
-        "src_l4_port_group",
-        "src_l4_port_max",
-        "src_l4_port_min",
-        "src_mac",
+    # Lists of fields according SW capablities
+    cap_dscp = ["dscp"]
+    cap_ecn = ["ecn"]
+    cap_frg = ["fragment"]
+    cap_tcp_flags = [
         "tcp_ack",
         "tcp_cwr",
         "tcp_ece",
@@ -75,15 +37,79 @@ class AclEntry(PyaoscxModule):
         "tcp_rst",
         "tcp_syn",
         "tcp_urg",
-        "tos",
-        "ttl",
-        "vlan",
     ]
+    cap_mac = [
+        "dst_mac",
+        "src_mac",
+    ]
+    cap_grp = [
+        "src_ip_group",
+        "dst_ip_group",
+        "src_l4_port_group",
+        "dst_l4_port_group",
+    ]
+    cap_pre = ["ip_precedence"]
+    cap_pcp = ["pcp"]
+    cap_tos = ["tos"]
+    cap_ttl = ["ttl"]
+    cap_log = ["log"]
+    cap_l4_port = [
+        "dst_l4_port_max",
+        "dst_l4_port_min",
+        "src_l4_port_max",
+        "src_l4_port_min",
+    ]
+
+    # These parameters cannot be changed once the ACE is created
+    # If any of them is set for update the entire ACE must be
+    # replaced (delete and re-create). This list is needed while
+    # we are not able to read the schema.
+    immutable_parameter_names = (
+        [
+            "action",
+            "count",
+            "dst_ip",
+            "ethertype",
+            "icmp_code",
+            "icmp_type",
+            "log",
+            "protocol",
+            "sequence_number",
+            "src_ip",
+            "vlan",
+        ]
+        + cap_l4_port
+        + cap_dscp
+        + cap_ecn
+        + cap_frg
+        + cap_tcp_flags
+        + cap_mac
+        + cap_grp
+        + cap_pre
+        + cap_pcp
+        + cap_tos
+        + cap_ttl
+        + cap_log
+    )
 
     # This list needs to be maintained only while we are not
     # able to read the schema. It is required when extracting
     # parameters to create copies.
     mutable_parameter_names = ["comment"]
+    setter_attr = [
+        "src_ip",
+        "dst_ip",
+        "protocol",
+        "src_mac",
+        "dst_mac",
+        "dscp",
+        "ethertype",
+        "icmp_type",
+        "src_l4_port_min",
+        "src_l4_port_max",
+        "dst_l4_port_min",
+        "dst_l4_port_max",
+    ]
 
     def __init__(
         self, session, sequence_number, parent_acl, uri=None, **kwargs
@@ -102,20 +128,99 @@ class AclEntry(PyaoscxModule):
         # Attribute dictionary used to manage the original data
         # obtained from the GET
         self.__original_attributes = {}
-        if "src_ip" in kwargs:
-            self.src_ip = kwargs.pop("src_ip")
-        if "dst_ip" in kwargs:
-            self.dst_ip = kwargs.pop("dst_ip")
+        eval_args = {}
+        for new_attr in self.setter_attr:
+            if new_attr in kwargs:
+                setattr(self, new_attr, kwargs[new_attr])
+                eval_args[new_attr] = kwargs.pop(new_attr)
+
+        # Checking against C&C
+        _exclude_args = []
+        _not_supported = []
+        if parent_acl.list_type == "ipv6":
+            if "classifier_ace_v6_ttl" not in parent_acl.capabilities:
+                _exclude_args.append("ttl")
+            if "classifier_ace_v6_vlan_id" not in parent_acl.capabilities:
+                _exclude_args.append("vlan")
+            if "classifier_ace_v6_tcp_flg" not in parent_acl.capabilities:
+                _exclude_args.extend(self.cap_tcp_flags)
+        if "classifier_ace_dscp" not in parent_acl.capabilities:
+            _exclude_args.extend(self.cap_dscp)
+        if "classifier_ace_ecn" not in parent_acl.capabilities:
+            _exclude_args.extend(self.cap_ecn)
+        if "classifier_ace_frg" not in parent_acl.capabilities:
+            _exclude_args.extend(self.cap_frg)
+        if "classifier_ace_tcp_flags" not in parent_acl.capabilities:
+            _exclude_args.extend(self.cap_tcp_flags)
+        if "classifier_ace_tcp_flg_cwr" not in parent_acl.capabilities:
+            _exclude_args.append("tcp_cwr")
+        if "classifier_ace_tcp_flg_ece" not in parent_acl.capabilities:
+            _exclude_args.append("tcp_ece")
+        if "classifier_ace_pre" not in parent_acl.capabilities:
+            _exclude_args.extend(self.cap_pre)
+        if "classifier_acl_object_group" not in parent_acl.capabilities:
+            _exclude_args.extend(self.cap_grp)
+        if "classifier_ace_pcp" not in parent_acl.capabilities:
+            _exclude_args.extend(self.cap_pcp)
+        if "classifier_ace_tos" not in parent_acl.capabilities:
+            _exclude_args.extend(self.cap_tos)
+        if "classifier_ace_ttl" not in parent_acl.capabilities:
+            _exclude_args.extend(self.cap_ttl)
+        if "action" not in kwargs or kwargs["action"] == "permit":
+            if "classifier_acl_log_permit" not in parent_acl.capabilities:
+                _exclude_args.extend(self.cap_log)
+        elif kwargs["action"] == "deny":
+            if "classifier_acl_log_deny" not in parent_acl.capabilities:
+                _exclude_args.extend(self.cap_log)
+
+        if (
+            parent_acl.list_type == "ipv4"
+            and "protocol" in eval_args
+            and eval_args["protocol"] in ["ah", "51", 51]
+            and "classifier_ace_v4_ah_ingress" not in parent_acl.capabilities
+            and "classifier_ace_v4_ah_egress" not in parent_acl.capabilities
+        ):
+            _not_supported.append("protocol='ah'")
+        if (
+            "protocol" in eval_args
+            and eval_args["protocol"] in ["sctp", "132", 132]
+            and [
+                l4_parm for l4_parm in self.cap_l4_port if l4_parm in eval_args
+            ]
+            != []
+            and "classifier_ace_sctp_l4_port" not in parent_acl.capabilities
+        ):
+            _not_supported.append("protocol='sctp' with L4 src/dst")
+        for arg in _exclude_args:
+            if arg in kwargs:
+                _not_supported.append(arg)
+        if _not_supported != []:
+            raise ParameterError(
+                "[ACL {0}/{1} - Entry {2}] Parameters not supported: {3}".format(
+                    parent_acl.name,
+                    parent_acl.list_type,
+                    sequence_number,
+                    ", ".join(_not_supported),
+                )
+            )
         # Set arguments needed for correct creation
         utils.set_creation_attrs(self, **kwargs)
         # Attribute used to know if object was changed recently
         self.__modified = False
 
+    def __eq__(self, other):
+        return (
+            isinstance(other, AclEntry)
+            and self.session == other.session
+            and self.sequence_number == other.sequence_number
+            and self.base_uri == other.base_uri
+        )
+
     def __set_acl(self, parent_acl):
         """
         Set parent Acl object as an attribute for the AclEntry object.
 
-        :param parent_acl: a Acl object.
+        :param parent_acl: a Pyaoscx.Acl object.
         """
         # Set parent acl
         self.__parent_acl = parent_acl
@@ -128,17 +233,11 @@ class AclEntry(PyaoscxModule):
             self.__parent_acl.list_type,
         )
 
-        # Verify acl_entry doesn't exist already inside acl
-        for acl_entry in self.__parent_acl.cfg_aces:
-            if acl_entry.sequence_number == self.sequence_number:
-                # Make list element point to current object
-                acl_entry = self
-            else:
-                # Add self to cfg_aces list in parent acl
-                self.__parent_acl.cfg_aces.append(self)
+        if self.sequence_number not in self.__parent_acl.cfg_aces:
+            self.__parent_acl.cfg_aces[self.sequence_number] = self
 
     @PyaoscxModule.connected
-    def get(self, depth=None, selector=None):
+    def get(self, depth=None, selector="configuration"):
         """
         Perform a GET call to retrieve data for an ACL Entry table entry and
             fill the object with the incoming attributes.
@@ -176,8 +275,34 @@ class AclEntry(PyaoscxModule):
         if not utils._response_ok(response, "GET"):
             raise GenericOperationError(response.text, response.status_code)
 
-        data = json.loads(response.text)
-
+        get_data = json.loads(response.text)
+        orig_data = {k: v for k, v in get_data.items() if v is not None}
+        ObjectGroup = self.session.api.get_module_class(
+            self.session, "ObjectGroup"
+        )
+        for grp_attr in self.cap_grp:
+            if grp_attr in orig_data:
+                obj_grp = ObjectGroup.from_response(
+                    self.session, orig_data[grp_attr]
+                )
+                orig_data[grp_attr] = obj_grp
+        data = orig_data.copy()
+        for new_attr in [
+            "src_ip",
+            "dst_ip",
+            "protocol",
+            "src_mac",
+            "dst_mac",
+            "dscp",
+            "ethertype",
+            "icmp_type",
+            "src_l4_port_min",
+            "src_l4_port_max",
+            "dst_l4_port_min",
+            "dst_l4_port_max",
+        ]:
+            if new_attr in data:
+                setattr(self, new_attr, data.pop(new_attr))
         # Add dictionary as attributes for the object
         utils.create_attrs(self, data)
 
@@ -189,7 +314,7 @@ class AclEntry(PyaoscxModule):
             )
 
         # Set original attributes
-        self.__original_attributes = data
+        self.__original_attributes.update(orig_data)
         # Remove ID
         if "sequence_number" in self.__original_attributes:
             self.__original_attributes.pop("sequence_number")
@@ -213,11 +338,12 @@ class AclEntry(PyaoscxModule):
             and an ACL Entry objects as values.
         """
         logging.info("Retrieving all %s data from switch", cls.__name__)
-        uri = "{0}/{1}{2}{3}/cfg_aces".format(
+        uri = "{0}/{1}{2}{3}/cfg_aces?depth={4}".format(
             parent_acl.base_uri,
             parent_acl.name,
             session.api.compound_index_separator,
             parent_acl.list_type,
+            session.api.default_facts_depth,
         )
 
         try:
@@ -231,17 +357,27 @@ class AclEntry(PyaoscxModule):
         data = json.loads(response.text)
 
         acl_entry_dict = {}
-        # Get all URI elements in the form of a list
-        uri_list = session.api.get_uri_from_data(data)
 
-        for uri in uri_list:
-            # Create a AclEntry object and adds it to parent acl list
-            sequence_number, acl_entry = AclEntry.from_uri(
-                session, parent_acl, uri
-            )
-            # Load all acl_entry data from within the Switch
-            acl_entry.get()
-            acl_entry_dict[sequence_number] = acl_entry
+        ObjectGroup = session.api.get_module_class(session, "ObjectGroup")
+        for ace_seq_num, ace_dict in data.items():
+            # Create a AclEntry object and setting attributes from response
+            ace_seq_num = int(ace_seq_num)
+            ace_kwargs = {k: v for k, v in ace_dict.items() if v is not None}
+            if "sequence_number" in ace_kwargs:
+                del ace_kwargs["sequence_number"]
+            orig_keys = list(ace_kwargs.keys())
+            for grp_attr in cls.cap_grp:
+                if grp_attr in ace_kwargs:
+                    obj_grp = ObjectGroup.from_response(
+                        session, ace_kwargs[grp_attr]
+                    )
+                    ace_kwargs[grp_attr] = obj_grp
+            ace_obj = cls(session, ace_seq_num, parent_acl, **ace_kwargs)
+            ace_orig = utils.get_attrs(ace_obj, orig_keys)
+            ace_obj.__original_attributes.update(ace_orig)
+            ace_obj.config_attrs = list(ace_orig.keys())
+            ace_obj.materialized = True
+            acl_entry_dict[ace_seq_num] = ace_obj
 
         return acl_entry_dict
 
@@ -257,26 +393,20 @@ class AclEntry(PyaoscxModule):
         :return modified: Boolean, True if object was created or modified.
         """
         if not self.__parent_acl.materialized:
-            self.__parent_acl.apply()
+            self.__parent_acl.get()
 
         modified = False
 
         remote_ace = AclEntry(
-            self.session, self.sequence_number, self.__parent_acl
+            self.session,
+            self.sequence_number,
+            self.__parent_acl,
+            **self.__original_attributes
         )
 
-        try:
-            # Should get all configurable attributes, not just the one that
-            # are available for writing
-            remote_ace.get(selector="configuration")
-        except GenericOperationError:
-            # If the get fails, the ACE doesn't exist, so a simple
-            # create will suffice
-            logging.info("%s for %s will be created", self, self.__parent_acl)
+        if not self.materialized:
             modified = self.create()
         else:
-            self._extract_missing_parameters_from(remote_ace)
-            # Get was successful, so the ACE already exists
             if PyaoscxModule._is_replace_required(
                 current=remote_ace,
                 replacement=self,
@@ -346,6 +476,7 @@ class AclEntry(PyaoscxModule):
             modified = True
 
         if modified:
+            self.__parent_acl.get()
             self.__parent_acl.apply()
 
         self.__modified = modified
@@ -361,23 +492,38 @@ class AclEntry(PyaoscxModule):
         """
         acl_entry_data = utils.get_attrs(self, self.config_attrs)
         acl_entry_data["sequence_number"] = self.sequence_number
-        if self.src_ip:
-            acl_entry_data["src_ip"] = self.src_ip
-        if self.dst_ip:
-            acl_entry_data["dst_ip"] = self.dst_ip
 
-        # Try to get protocol number
-        try:
-            if isinstance(self.protocol, str):
-                if self.protocol == "any" or self.protocol == "":
-                    acl_entry_data.pop("protocol")
-                else:
-                    protocol_num = self.protocol_dict[self.protocol]
-                    acl_entry_data["protocol"] = protocol_num
-            elif isinstance(self.protocol, int):
-                acl_entry_data["protocol"] = self.protocol
-        except Exception:
-            pass
+        for new_attr in [
+            "src_ip",
+            "dst_ip",
+            "src_mac",
+            "dst_mac",
+            "protocol",
+            "ethertype",
+        ]:
+            new_value = getattr(self, new_attr)
+            if new_value == "any":
+                acl_entry_data.pop(new_attr, None)
+            else:
+                acl_entry_data[new_attr] = new_value
+
+        for new_attr in [
+            "dscp",
+            "icmp_type",
+            "src_l4_port_min",
+            "src_l4_port_max",
+            "dst_l4_port_min",
+            "dst_l4_port_max",
+        ]:
+            new_value = getattr(self, new_attr)
+            if new_value:
+                acl_entry_data[new_attr] = new_value
+
+        for group_param in self.cap_grp:
+            if group_param in acl_entry_data:
+                group_obj = acl_entry_data[group_param]
+                acl_entry_data[group_param] = group_obj.get_info_format()
+
         post_data = json.dumps(acl_entry_data)
 
         try:
@@ -395,7 +541,7 @@ class AclEntry(PyaoscxModule):
 
         # Get all object's data
         self.get()
-
+        self.__parent_acl.get()
         self.__parent_acl.apply()
 
         # Object was created, means modified
@@ -421,12 +567,16 @@ class AclEntry(PyaoscxModule):
         logging.info("SUCCESS: Deleting %s", self)
 
         # Delete back reference from ACL
-        for acl_entry in self.__parent_acl.cfg_aces:
-            if acl_entry.sequence_number == self.sequence_number:
-                self.__parent_acl.cfg_aces.remove(acl_entry)
+        del self.__parent_acl.cfg_aces[self.sequence_number]
+
+        self.__parent_acl.get()
         self.__parent_acl.apply()
 
         # Delete object attributes
+        for attr in self.setter_attr:
+            if attr in self.config_attrs:
+                self.config_attrs.remove(attr)
+
         utils.delete_attrs(self, self.config_attrs)
 
     @classmethod
@@ -613,26 +763,81 @@ class AclEntry(PyaoscxModule):
         return self.apply()
 
     @property
+    def src_mac(self):
+        """
+        Getter for src_mac attribute
+
+        :return: Source MAC address
+        """
+        return self._src_mac if hasattr(self, "_src_mac") else "any"
+
+    @src_mac.setter
+    def src_mac(self, new_src_mac):
+        """
+        Setter for src_mac attribute
+        """
+        if new_src_mac and new_src_mac.lower() != "any":
+            acl_type = self.__parent_acl.list_type
+            if acl_type != "mac":
+                raise ParameterError(
+                    "MAC Address not allowed for ACL type {0}".format(acl_type)
+                )
+            self._src_mac = utils.validate_mac_address(
+                new_src_mac, cisco_format=True
+            )
+        else:
+            self._src_mac = "any"
+
+    @property
+    def dst_mac(self):
+        """
+        Getter for dst_mac attribute
+
+        :return: Destination MAC address
+        """
+        return self._dst_mac if hasattr(self, "_dst_mac") else "any"
+
+    @dst_mac.setter
+    def dst_mac(self, new_dst_mac):
+        """
+        Setter for dst_mac attribute
+        """
+        if new_dst_mac and new_dst_mac.lower() != "any":
+            acl_type = self.__parent_acl.list_type
+            if acl_type != "mac":
+                raise ParameterError(
+                    "MAC Address not allowed for ACL type {0}".format(acl_type)
+                )
+            self._dst_mac = utils.validate_mac_address(
+                new_dst_mac, cisco_format=True
+            )
+        else:
+            self._dst_mac = "any"
+
+    @property
     def src_ip(self):
         """
         Getter method for source ip attribute.
 
         :return: String value for src_ip.
         """
-        return self._src_ip if hasattr(self, "_src_ip") else None
+        return self._src_ip if hasattr(self, "_src_ip") else "any"
 
     @src_ip.setter
     def src_ip(self, new_src_ip):
         """
         Setter method for the src_ip attribute.
         """
-        version = utils.get_ip_version(new_src_ip)
-        if version != self.__parent_acl.list_type:
-            raise VerificationError(
-                "Version does not match the IP"
-                "version type in {}".format(self.__parent_acl.name)
-            )
-        self._src_ip = new_src_ip
+        if new_src_ip and new_src_ip.lower() != "any":
+            version = utils.get_ip_version(new_src_ip)
+            if version != self.__parent_acl.list_type:
+                raise VerificationError(
+                    "Version does not match the IP "
+                    "version type in {}".format(self.__parent_acl.name)
+                )
+            self._src_ip = utils.fix_ip_mask(new_src_ip, version)
+        else:
+            self._src_ip = "any"
 
     @property
     def dst_ip(self):
@@ -641,17 +846,248 @@ class AclEntry(PyaoscxModule):
 
         :return: String value for dst_ip.
         """
-        return self._dst_ip if hasattr(self, "_dst_ip") else None
+        return self._dst_ip if hasattr(self, "_dst_ip") else "any"
 
     @dst_ip.setter
     def dst_ip(self, new_dst_ip):
         """
         Setter method for the dst_ip attribute.
         """
-        version = utils.get_ip_version(new_dst_ip)
-        if version != self.__parent_acl.list_type:
-            raise VerificationError(
-                "Version does not match the IP"
-                "version type in {}".format(self.__parent_acl.name)
-            )
-        self._dst_ip = new_dst_ip
+        if new_dst_ip and new_dst_ip.lower() != "any":
+            version = utils.get_ip_version(new_dst_ip)
+            if version != self.__parent_acl.list_type:
+                raise VerificationError(
+                    "Version does not match the IP "
+                    "version type in {}".format(self.__parent_acl.name)
+                )
+            self._dst_ip = utils.fix_ip_mask(new_dst_ip, version)
+        else:
+            self._dst_ip = "any"
+
+    @property
+    def dscp(self):
+        """
+        Getter method for DSCP attribute.
+
+        :return: DSCP value, integer or String
+        """
+        return self._dscp if hasattr(self, "_dscp") else None
+
+    @dscp.setter
+    def dscp(self, new_dscp):
+        """
+        Setter method for the dscp attribute.
+        """
+        if isinstance(new_dscp, str):
+            if new_dscp not in utils.dscp:
+                raise ParameterError(
+                    "Invalid DSCP {0} - valid DSCP values are: {1}".format(
+                        new_dscp, ", ".join(utils.dscp)
+                    )
+                )
+            self._dscp = utils.dscp[new_dscp]
+        else:
+            self._dscp = new_dscp
+
+    @property
+    def protocol(self):
+        """
+        Getter method for protocol attribute
+
+        :return: protocol value, integer or string
+        """
+        return self._protocol if hasattr(self, "_protocol") else "any"
+
+    @protocol.setter
+    def protocol(self, new_proto):
+        """
+        Setter method for protocol attribute
+        """
+        if isinstance(new_proto, str):
+            if new_proto.lower() in ["ip", "any", "ipv6", ""]:
+                self._protocol = "any"
+            elif new_proto in utils.ip_protocols:
+                self._protocol = utils.ip_protocols[new_proto]
+            else:
+                raise ParameterError(
+                    "Unknown IP protocol {0}, valid protocols: {1}".format(
+                        new_proto, ", ".join(utils.ip_protocols)
+                    )
+                )
+        else:
+            self._protocol = new_proto
+
+    @property
+    def icmp_type(self):
+        """
+        Getter for icmp_type attribute
+
+        :return: Icmp type value, string or integer
+        """
+        return self._icmp_type if hasattr(self, "_icmp_type") else None
+
+    @icmp_type.setter
+    def icmp_type(self, new_icmp_type):
+        acl_type = self.__parent_acl.list_type
+        icmp_types_dict = (
+            utils.icmp_types if acl_type == "ipv4" else utils.icmpv6_types
+        )
+        if isinstance(new_icmp_type, str):
+            if new_icmp_type in icmp_types_dict:
+                self._icmp_type = icmp_types_dict[new_icmp_type]
+            else:
+                raise ParameterError(
+                    "Invalid ICMP Type {0} - valid types are: {1}".format(
+                        new_icmp_type, ", ".join(icmp_types_dict)
+                    )
+                )
+        else:
+            self._icmp_type = new_icmp_type
+
+    @property
+    def ethertype(self):
+        """
+        Getter for ethertype attribute
+
+        :return: Ethertype value, integer or string
+        """
+        return self._ethertype if hasattr(self, "_ethertype") else "any"
+
+    @ethertype.setter
+    def ethertype(self, new_ethertype):
+        """
+        Setter for ethertype attribute
+        """
+        if isinstance(new_ethertype, str):
+            if new_ethertype.lower() == "any":
+                self._ethertype = "any"
+            elif new_ethertype in utils.ethertypes:
+                self._ethertype = utils.ethertypes[new_ethertype]
+            else:
+                raise ParameterError(
+                    "Unknown Ethertype {0} - valid ethertypes are: {1}".format(
+                        new_ethertype, ", ".join(utils.ethertypes)
+                    )
+                )
+        else:
+            self._ethertype = new_ethertype
+
+    @property
+    def src_l4_port_min(self):
+        """
+        Getter for src_l4_port_min attribute
+
+        :return: Source minimum L4 port
+        """
+        return (
+            self._src_l4_port_min
+            if hasattr(self, "_src_l4_port_min")
+            else None
+        )
+
+    @src_l4_port_min.setter
+    def src_l4_port_min(self, new_l4_port):
+        """
+        Setter for src_l4_port_min attribute
+        """
+        if isinstance(new_l4_port, str):
+            if new_l4_port in utils.l4_ports:
+                self._src_l4_port_min = utils.l4_ports[new_l4_port]
+            else:
+                raise ParameterError(
+                    "Unknown L4 port {0}, valid ports are: {1}".format(
+                        new_l4_port, ", ".join(utils.l4_ports)
+                    )
+                )
+        else:
+            self._src_l4_port_min = new_l4_port
+
+    @property
+    def src_l4_port_max(self):
+        """
+        Getter for src_l4_port_max attribute
+
+        :return: Source maximum L4 port
+        """
+        return (
+            self._src_l4_port_max
+            if hasattr(self, "_src_l4_port_max")
+            else None
+        )
+
+    @src_l4_port_max.setter
+    def src_l4_port_max(self, new_l4_port):
+        """
+        Setter for src_l4_port_max attribute
+        """
+        if isinstance(new_l4_port, str):
+            if new_l4_port in utils.l4_ports:
+                self._src_l4_port_max = utils.l4_ports[new_l4_port]
+            else:
+                raise ParameterError(
+                    "Unknown L4 port {0}, valid ports are: {1}".format(
+                        new_l4_port, ", ".join(utils.l4_ports)
+                    )
+                )
+        else:
+            self._src_l4_port_max = new_l4_port
+
+    @property
+    def dst_l4_port_min(self):
+        """
+        Getter for dst_l4_port_min attribute
+
+        :return: Destination minimum L4 port
+        """
+        return (
+            self._dst_l4_port_min
+            if hasattr(self, "_dst_l4_port_min")
+            else None
+        )
+
+    @dst_l4_port_min.setter
+    def dst_l4_port_min(self, new_l4_port):
+        """
+        Setter for dst_l4_port_min attribute
+        """
+        if isinstance(new_l4_port, str):
+            if new_l4_port in utils.l4_ports:
+                self._dst_l4_port_min = utils.l4_ports[new_l4_port]
+            else:
+                raise ParameterError(
+                    "Unknown L4 port {0}, valid ports are: {1}".format(
+                        new_l4_port, ", ".join(utils.l4_ports)
+                    )
+                )
+        else:
+            self._dst_l4_port_min = new_l4_port
+
+    @property
+    def dst_l4_port_max(self):
+        """
+        Getter for dst_l4_port_max attribute
+
+        :return: Destination maximum L4 port
+        """
+        return (
+            self._dst_l4_port_max
+            if hasattr(self, "_dst_l4_port_max")
+            else None
+        )
+
+    @dst_l4_port_max.setter
+    def dst_l4_port_max(self, new_l4_port):
+        """
+        Setter for src_l4_port_max attribute
+        """
+        if isinstance(new_l4_port, str):
+            if new_l4_port in utils.l4_ports:
+                self._dst_l4_port_max = utils.l4_ports[new_l4_port]
+            else:
+                raise ParameterError(
+                    "Unknown L4 port {0}, valid ports are: {1}".format(
+                        new_l4_port, ", ".join(utils.l4_ports)
+                    )
+                )
+        else:
+            self._dst_l4_port_max = new_l4_port
